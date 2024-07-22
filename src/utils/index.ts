@@ -1,22 +1,21 @@
 import { get_user_state, sign_request_to_network } from '../mishtiwasm/';
 import { MISHTI_RELAY_URL, SIGNER_PRIVATE_KEY, SIGNER_ACCOUNT } from '../constants';
+import {
+  getMishtiEpoch,
+  setMishtiEpoch,
+  getRequestsFromSigner,
+  setRequestsFromSigner,
+  incrementRequestsFromSigner,
+} from './redis';
+import { MishtiMethod, StateResponse, RequestToNetwork } from '../types';
 
-type MishtiMethod = 'OPRFSecp256k1' | 'DecryptBabyJubJub' | 'JWTPRFSecp256k1';
-
-type RequestToNetwork = {
-  method: MishtiMethod;
-  point: Uint8Array;
-  epoch: number;
-  request_per_user: number;
-  signature?: Uint8Array;
-  extra_data?: Uint8Array;
-};
-
-type StateResponse = {
-  epoch: number;
-  method: MishtiMethod;
-  requests_from_user: number;
-};
+async function fetchAndCacheSignerState(method: MishtiMethod) {
+  const state = await get_user_state(method, SIGNER_ACCOUNT.address);
+  const parsed = JSON.parse(state) as StateResponse;
+  await setRequestsFromSigner(parsed.requests_from_user);
+  await setMishtiEpoch(parsed.epoch);
+  return parsed;
+}
 
 /**
  * Return the user state of the sponsor account.
@@ -25,19 +24,37 @@ type StateResponse = {
  * result, and return it.
  */
 async function getMishtiSignerState(method: MishtiMethod) {
-  // TODO: Get user state
-  // - TODO: Check cache for user state
-  // - TODO: If not in cache, query mishti
-  const state = await get_user_state(method, SIGNER_ACCOUNT.address);
-  //   - TODO: Cache result
+  // Check cache first
+  const requests_from_user = await getRequestsFromSigner();
+  const epoch = await getMishtiEpoch();
+  if (requests_from_user != null && epoch != null) {
+    return {
+      requests_from_user,
+      epoch,
+    };
+  }
 
-  // return {
-  //   epoch: 0,
-  //   method: 'OPRFSecp256k1' as MishtiMethod,
-  //   requests_from_user: 0,
-  // };
+  // If not in cache, query mishti, and cache the result
+  const parsed = await fetchAndCacheSignerState(method);
 
-  return JSON.parse(state) as StateResponse;
+  return parsed;
+}
+
+async function signAndPostToMishtiRelayer(
+  method: MishtiMethod,
+  request: RequestToNetwork,
+) {
+  const signedRequestBody = JSON.parse(await sign_request_to_network(
+    JSON.stringify(request), 
+    SIGNER_PRIVATE_KEY,
+  ));
+  return fetch(`${MISHTI_RELAY_URL}/relay-${method}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(signedRequestBody),
+  });
 }
 
 /**
@@ -58,19 +75,29 @@ export async function sendMishtiRequest(
     extra_data,
   } as RequestToNetwork;
 
-  const signedRequestBody = JSON.parse(await sign_request_to_network(
-    JSON.stringify(request), 
-    SIGNER_PRIVATE_KEY,
-  ));
+  let resp = await signAndPostToMishtiRelayer(method, request);
 
-  return fetch(`${MISHTI_RELAY_URL}/relay-${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(signedRequestBody),
-  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    // If invalid epoch, refetch and cache signer state to update epoch. 
+    // Then try once more.
+    if (text == 'Invalid epoch') {
+      const newState = await fetchAndCacheSignerState(method);
+      request.epoch = newState.epoch;
+      resp = await signAndPostToMishtiRelayer(method, request);
+    } else {
+      // Unknown error. Forward Mishti's response to user
+      return {
+        status: resp.status,
+        text: () => new Promise<string>((resolve) => resolve(text)),
+      };
+    }
+  }
 
-  // TODO: Handle error case where Epoch is too old / incorrect
-  // - If epoch is too old, refetch (and re-cache) user state from mishti and retry
+  if (resp.ok) {
+    // Update cache
+    await incrementRequestsFromSigner();
+  }
+
+  return resp;
 }
