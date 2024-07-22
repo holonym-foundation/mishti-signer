@@ -25,10 +25,15 @@ router.post<RequestBody, string>('/', async (req, res) => {
     return res.status(400).send('Missing required parameter "point"');
   }
   
-  // TODO: Lock a mutex for the duration of this request. We need to 
-  // atomically increment the number of requests from the signer and
-  // make sure the stated number of requests from the signer is
-  // correct for each request.
+  // TODO: Maybe: Allow many signer accounts. Create a structure in memory, 
+  // [{ signer, mutex }, ...], which has a mutex for every signer private
+  // key. When a request comes in, check if any signers are available.
+  // If one is, lock its mutex and use that signer. If none are available,
+  // randomly select one and wait for its mutex to unlock.
+  // TODO: SEE THE PREVIOUS TODO FIRST. Lock a mutex for the duration of 
+  // this request. We need to  atomically increment the number of requests
+  // from the signer and make sure the stated number of requests from the 
+  // signer is correct for each request.
 
   // Rate limit by IP
   const numRequests = await getNumRequestsFromIp(req.ip);
