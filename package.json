@@ -1,7 +1,7 @@
 {
-  "name": "express-api-starter-ts",
-  "version": "1.2.0",
-  "description": " A basic starter for an express.js API with Typescript",
+  "name": "mishti-signer",
+  "version": "0.0.0",
+  "description": "A server that sponsors requests to Mishti Network.",
   "main": "src/index.ts",
   "scripts": {
     "start": "ts-node src/index.ts",
@@ -13,11 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
-  "author": "CJ R. <cj@null.computer> (https://w3cj.now.sh)",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/w3cj/express-api-starter.git"
-  },
   "license": "MIT",
   "dependencies": {
     "@holonym-foundation/mishtiwasm": "^0.2.0",
