@@ -1,6 +1,6 @@
 import express from 'express';
 
-import MessageResponse from '../interfaces/MessageResponse';
+import { MessageResponse } from '../types';
 import sponsor from './sponsor';
 
 const router = express.Router();

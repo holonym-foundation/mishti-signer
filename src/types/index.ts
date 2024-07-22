@@ -1,3 +1,7 @@
+export interface MessageResponse {
+  message: string;
+}
+
 export type MishtiMethod = 'OPRFSecp256k1' | 'DecryptBabyJubJub' | 'JWTPRFSecp256k1';
 
 export type StateResponse = {

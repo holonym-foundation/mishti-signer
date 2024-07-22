@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 
 import api from './api';
-import MessageResponse from './interfaces/MessageResponse';
+import { MessageResponse } from './types';
 
 require('dotenv').config();
 
